@@ -1,0 +1,22 @@
+# fly.toml app configuration file generated for email-generation-server on 2024-07-28T02:03:33+10:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'email-generation-server'
+primary_region = 'syd'
+
+[build]
+
+[http_service]
+  internal_port = 443
+  force_https = true
+  auto_stop_machines = 'stop'
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ['app']
+
+[[vm]]
+  memory = '1gb'
+  cpu_kind = 'shared'
+  cpus = 1
