@@ -1,4 +1,7 @@
-use actix_web::{get, post, web, App, HttpResponse, HttpServer, Responder};
+use actix_web::{ get, post, web, App, HttpResponse, HttpServer, Responder };
+use dotenv::dotenv;
+mod routes;
+
 
 #[get("/")]
 async fn hello() -> impl Responder {
@@ -16,13 +19,18 @@ async fn manual_hello() -> impl Responder {
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
+    dotenv().ok();
+    let port = std::env::var("PORT").unwrap();
+    let port = port.parse::<u16>().unwrap();
+    
     HttpServer::new(|| {
         App::new()
             .service(hello)
             .service(echo)
+            .route("/email", web::post().to(routes::email::send_email))
             .route("/hey", web::get().to(manual_hello))
-    })
-    .bind(("0.0.0.0", 443))?
-    .run()
-    .await
+        })
+        .bind(("0.0.0.0", port))?
+        .run()
+        .await
 }
