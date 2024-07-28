@@ -1,7 +1,9 @@
 use actix_web::{ get, post, web, App, HttpResponse, HttpServer, Responder };
 use dotenv::dotenv;
-mod routes;
+use actix_web::middleware::Logger;
 
+mod routes;
+use env_logger::Env;
 
 #[get("/")]
 async fn hello() -> impl Responder {
@@ -22,9 +24,14 @@ async fn main() -> std::io::Result<()> {
     dotenv().ok();
     let port = std::env::var("PORT").unwrap();
     let port = port.parse::<u16>().unwrap();
-    
+
+    env_logger::init_from_env(Env::default().default_filter_or("info"));
+
+
     HttpServer::new(|| {
         App::new()
+            .wrap(Logger::default())
+            .wrap(Logger::new("%a %{User-Agent}i"))
             .service(hello)
             .service(echo)
             .route("/email", web::post().to(routes::email::send_email))
