@@ -1,10 +1,10 @@
+use actix_web::middleware::Logger;
 use actix_web::{
     dev::{forward_ready, Service, ServiceRequest, ServiceResponse, Transform},
     error::ErrorUnauthorized,
     get, post, web, App, Error, HttpResponse, HttpServer, Responder,
 };
 use dotenv::dotenv;
-use actix_web::middleware::Logger;
 use env_logger::Env;
 use futures_util::future::LocalBoxFuture;
 use std::future::{ready, Ready};
@@ -47,7 +47,7 @@ where
 
     fn call(&self, req: ServiceRequest) -> Self::Future {
         let api_key = std::env::var("API_KEY").expect("API_KEY must be set");
-        
+
         if let Some(key) = req.headers().get("x-api-key") {
             let key = key.to_str().unwrap();
             if key == api_key {
@@ -58,13 +58,10 @@ where
                 });
             }
         }
-        
-        Box::pin(async move {
-            Err(ErrorUnauthorized("Invalid API Key"))
-        })
+
+        Box::pin(async move { Err(ErrorUnauthorized("Invalid API Key")) })
     }
 }
-
 
 #[get("/")]
 async fn hello() -> impl Responder {
@@ -98,6 +95,7 @@ async fn main() -> std::io::Result<()> {
             .service(echo)
             .route("/email", web::post().to(routes::email::send_email))
             .route("/search", web::post().to(routes::bing::search))
+            .route("/transform", web::post().to(routes::open_ai::transform))
             .route("/hey", web::get().to(manual_hello))
     })
     .bind(("0.0.0.0", port))?

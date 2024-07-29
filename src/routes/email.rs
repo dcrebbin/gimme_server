@@ -1,9 +1,9 @@
-use actix_web::{ web, Error };
-use serde::{ Deserialize };
+use actix_web::{web, Error};
+use dotenv::dotenv;
 use lettre::transport::smtp::authentication::Credentials;
 use lettre::transport::smtp::SmtpTransport;
-use lettre::{ Message, Transport };
-use dotenv::dotenv;
+use lettre::{Message, Transport};
+use serde::Deserialize;
 
 #[derive(Deserialize)]
 pub struct Email {
@@ -27,7 +27,10 @@ pub async fn send_email(info: web::Json<Email>) -> Result<String, Error> {
         .unwrap();
 
     let creds = Credentials::new(smtp_username.to_string(), smtp_password.to_string());
-    let mailer = SmtpTransport::relay(&smtp_host).unwrap().credentials(creds).build();
+    let mailer = SmtpTransport::relay(&smtp_host)
+        .unwrap()
+        .credentials(creds)
+        .build();
     match mailer.send(&email) {
         Ok(_) => println!("Email sent successfully!"),
         Err(e) => eprintln!("Could not send email: {:?}", e),
