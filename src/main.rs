@@ -96,6 +96,10 @@ async fn main() -> std::io::Result<()> {
             .route("/email", web::post().to(routes::email::send_email))
             .route("/search", web::post().to(routes::bing::search))
             .route("/transform", web::post().to(routes::open_ai::transform))
+            .route(
+                "/perplexity",
+                web::post().to(routes::perplexity::search_and_transform),
+            )
             .route("/hey", web::get().to(manual_hello))
     })
     .bind(("0.0.0.0", port))?
