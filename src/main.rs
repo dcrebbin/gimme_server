@@ -97,6 +97,7 @@ async fn main() -> std::io::Result<()> {
             .service(hello)
             .service(echo)
             .route("/email", web::post().to(routes::email::send_email))
+            .route("/search", web::post().to(routes::bing::search))
             .route("/hey", web::get().to(manual_hello))
     })
     .bind(("0.0.0.0", port))?
