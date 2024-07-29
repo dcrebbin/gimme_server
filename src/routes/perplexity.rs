@@ -1,6 +1,7 @@
 use actix_web::{web, HttpResponse, Responder};
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION, CONTENT_TYPE};
 use serde::{Deserialize, Serialize};
+use std::time::Instant;
 
 const SONAR_SMALL: &str = "llama-3-sonar-small-32k-online";
 const SONAR_LARGE: &str = "llama-3-sonar-large-32k-online";
@@ -35,6 +36,7 @@ struct Choice {
 }
 
 pub async fn search_and_transform(req: web::Json<SearchRequest>) -> impl Responder {
+    let start_time: Instant = Instant::now();
     let api_key = match std::env::var("PERPLEXITY_API_KEY") {
         Ok(key) => key,
         Err(_) => return HttpResponse::InternalServerError().body("PERPLEXITY_API_KEY not set"),
@@ -83,6 +85,10 @@ pub async fn search_and_transform(req: web::Json<SearchRequest>) -> impl Respond
             perplexity_response.status()
         ));
     }
+
+    let end_time: Instant = Instant::now();
+    let duration: std::time::Duration = end_time.duration_since(start_time);
+    println!("Perplexity request took: {:?}", duration);
 
     let response_content: PerplexityResponse = match perplexity_response.json().await {
         Ok(content) => content,

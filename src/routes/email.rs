@@ -1,3 +1,4 @@
+use std::time::Instant;
 use actix_web::{web, Error};
 use dotenv::dotenv;
 use lettre::transport::smtp::authentication::Credentials;
@@ -14,6 +15,8 @@ pub struct Email {
 
 pub async fn send_email(info: web::Json<Email>) -> Result<String, Error> {
     dotenv().ok();
+
+    let start_time: Instant = Instant::now();
 
     let smtp_host = std::env::var("SMTP_HOST").expect("SMTP_HOST must be set");
     let smtp_username = std::env::var("SMTP_USERNAME").expect("SMTP_USERNAME must be set");
@@ -35,6 +38,10 @@ pub async fn send_email(info: web::Json<Email>) -> Result<String, Error> {
         Ok(_) => println!("Email sent successfully!"),
         Err(e) => eprintln!("Could not send email: {:?}", e),
     }
+
+    let end_time: Instant = Instant::now();
+    let duration: std::time::Duration = end_time.duration_since(start_time);
+    println!("Email request took: {:?}", duration);
 
     Ok(format!("Email sent!"))
 }

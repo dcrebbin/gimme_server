@@ -1,3 +1,4 @@
+use std::time::Instant;
 use actix_web::{web, HttpResponse, Responder};
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION, CONTENT_TYPE};
 use serde::{Deserialize, Serialize};
@@ -31,11 +32,11 @@ pub struct CompletionRequest {
 }
 
 pub async fn transform(req: web::Json<CompletionRequest>) -> impl Responder {
+    let start_time: Instant = Instant::now();
     let completions_endpoint = "https://api.openai.com/v1/chat/completions";
     let api_key = match std::env::var("OPEN_AI_API_KEY") {
         Ok(key) => key,
         Err(_) => return HttpResponse::InternalServerError().body("OPEN_AI_API_KEY not set"),
-
     };
 
     let mut headers = HeaderMap::new();
@@ -90,6 +91,10 @@ pub async fn transform(req: web::Json<CompletionRequest>) -> impl Responder {
     {
         return HttpResponse::InternalServerError().body("No choices returned from OpenAI");
     }
+
+    let end_time = Instant::now();
+    let duration: std::time::Duration = end_time.duration_since(start_time);
+    println!("Transform request took: {:?}", duration);
 
     let content = most_relevant_data.choices.unwrap()[0]
         .message
