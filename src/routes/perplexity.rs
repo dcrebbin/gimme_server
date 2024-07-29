@@ -88,7 +88,12 @@ pub async fn search_and_transform(req: web::Json<SearchRequest>) -> impl Respond
 
     let end_time: Instant = Instant::now();
     let duration: std::time::Duration = end_time.duration_since(start_time);
-    println!("Perplexity request took: {:?}", duration);
+    println!(
+        "Perplexity request took: {:?} with {} and {} characters",
+        duration,
+        perplexity_request.model,
+        perplexity_request.messages[0].content.len()
+    );
 
     let response_content: PerplexityResponse = match perplexity_response.json().await {
         Ok(content) => content,

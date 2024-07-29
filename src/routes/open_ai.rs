@@ -1,7 +1,7 @@
-use std::time::Instant;
 use actix_web::{web, HttpResponse, Responder};
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION, CONTENT_TYPE};
 use serde::{Deserialize, Serialize};
+use std::time::Instant;
 
 #[derive(Serialize, Deserialize)]
 pub struct OpenAiRequest {
@@ -94,7 +94,10 @@ pub async fn transform(req: web::Json<CompletionRequest>) -> impl Responder {
 
     let end_time = Instant::now();
     let duration: std::time::Duration = end_time.duration_since(start_time);
-    println!("Transform request took: {:?}", duration);
+    println!(
+        "Transform request took: {:?} with {} and {} characters",
+        duration, req.model, req.prompt.len()
+    );
 
     let content = most_relevant_data.choices.unwrap()[0]
         .message
