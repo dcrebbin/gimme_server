@@ -23,6 +23,8 @@ pub const CUSTOM_EMAILS: [CustomEmail; 1] = [CustomEmail {
     send_to: "devon@land.org.au",
 }];
 
+pub const MARKDOWN_TEMPLATE: &str = include_str!("../templates/markdown_template.md");
+
 const SEARCH_OPTIMISATION_PROMPT: &str = "Optimise this natural language query to show the best and latest results in a search engine. Only return the updated query. If the query contains more than 1 request then split it into multiple queries using semi-colons ;. Query:";
 
 pub async fn send_notification() -> Result<String, Error> {
@@ -30,83 +32,28 @@ pub async fn send_notification() -> Result<String, Error> {
         if email.schedule.contains(&chrono::Local::now().weekday()) {
             let start_time = Instant::now();
 
-            let search_responder = open_ai::transform(web::Json(CompletionRequest {
-                model: "gpt-4o-mini".to_string(),
-                query: SEARCH_OPTIMISATION_PROMPT.to_string() + &email.topic.to_string(),
-            }))
-            .await;
-
-            let response_body = search_responder.into_body();
-
-            let search_optimised_query =
-                String::from_utf8(response_body.try_into_bytes().unwrap().to_vec()).unwrap();
-
-            let search_results = search_optimised_query.split(";");
+            let search_results = create_optimized_search_queries(&email.topic).await;
 
             let mut converted_markdowns = Vec::new();
             for search_result in search_results {
-                let search_result = perplexity::search_and_transform(web::Json(SearchRequest {
-                    query: search_result.to_string(),
-                    use_sonar_small: Some(false),
-                }))
-                .await;
-
-                let search_result = search_result.into_body();
-                let search_result =
-                    String::from_utf8(search_result.try_into_bytes().unwrap().to_vec()).unwrap();
-                println!("Search result: {:?}", search_result);
+                let search_result = perplexity_search_and_transform(&search_result).await;
                 converted_markdowns.push(search_result);
             }
 
-            let combined_markdown = converted_markdowns
+            let combined_results = converted_markdowns
                 .iter()
                 .map(|markdown| markdown.to_string())
                 .collect::<Vec<String>>()
                 .join("\n");
 
-            let transformed_markdown = open_ai::transform(web::Json(CompletionRequest {
-                model: "gpt-4o".to_string(),
-                query:
-                    "Convert this text into markdown so it's 100% valid and using the correct markdown formatting, replace all placeholder content with the content from Input. Remove any irrelevant content. Only return the formatted markdown response with no code blocks or anything else. Example Template:".to_string() +
-                    "### {Title}
+            let converted_markdown = convert_to_markdown(&combined_results).await;
 
-### {Section 1}
+            let converted_html = markdown_to_html(&converted_markdown);
 
-**{Item 1}**
-  - **{Sub Heading}:** {content}
-  - **{Description}:** {content}
-  - [Learn more]({url})
-
-**{Item 2}**
-  - **{Sub Heading}** {content}
-  - **{Description}:** {content}
-  - [Learn more]({url})
-  
-### {Section 2}
-
-**{Item 1}**
-  - **{Sub Heading}:** {content}
-  - **{Description}:** {content}
-  - [Learn more]({url})
-
-**{Item 2}**
-  - **{Sub Heading}:** {content}
-  - **{Description}:** {content}
-  - [Learn more]({url})"
-                        + " Input:"+&combined_markdown,
-            }))
-            .await;
-
-            let transformed_markdown = transformed_markdown.into_body();
-            let transformed_markdown =
-                String::from_utf8(transformed_markdown.try_into_bytes().unwrap().to_vec()).unwrap();
-
-            fs::write("converted_markdown.md", transformed_markdown.clone()).unwrap();
-
-            println!("Converted HTML: {:?}", transformed_markdown);
-            let converted_html = markdown_to_html(&transformed_markdown);
-
-            fs::write("converted_html.html", converted_html.clone()).unwrap();
+            if std::env::var("ENVIRONMENT").unwrap() == "development" {
+                println!("Converted HTML: {:?}", converted_html);
+                fs::write("converted_template.html", converted_html.clone()).unwrap();
+            }
             let duration = start_time.elapsed();
             println!("Notification took: {:?}", duration);
 
@@ -120,6 +67,60 @@ pub async fn send_notification() -> Result<String, Error> {
     }
 
     Ok(format!("Notification/s sent!"))
+}
+
+async fn create_optimized_search_queries(topic: &str) -> Vec<String> {
+    let search_responder = open_ai::transform(web::Json(CompletionRequest {
+        model: "gpt-4o-mini".to_string(),
+        query: SEARCH_OPTIMISATION_PROMPT.to_string() + topic,
+    }))
+    .await;
+
+    let response_body = search_responder.into_body();
+
+    let search_optimised_query =
+        String::from_utf8(response_body.try_into_bytes().unwrap().to_vec()).unwrap();
+
+    search_optimised_query
+        .split(";")
+        .map(|s| s.to_string())
+        .collect()
+}
+
+pub async fn perplexity_search_and_transform(query: &str) -> String {
+    let search_result = perplexity::search_and_transform(web::Json(SearchRequest {
+        query: query.to_string(),
+        use_sonar_small: Some(false),
+    }))
+    .await;
+
+    let search_result = search_result.into_body();
+    let search_result =
+        String::from_utf8(search_result.try_into_bytes().unwrap().to_vec()).unwrap();
+
+    search_result
+}
+
+pub async fn convert_to_markdown(markdown: &str) -> String {
+    let transformed_markdown = open_ai::transform(web::Json(CompletionRequest {
+        model: "gpt-4o-mini".to_string(),
+        query:
+            "Convert this text into markdown so it's 100% valid and using the correct markdown formatting, replace all placeholder content with the content from Input. Remove any irrelevant content. Only return the formatted markdown response with no code blocks or anything else. Example Template:".to_string() +
+            MARKDOWN_TEMPLATE +
+            " Input:" +
+            &markdown,
+    }))
+    .await;
+
+    let transformed_markdown = transformed_markdown.into_body();
+    let transformed_markdown =
+        String::from_utf8(transformed_markdown.try_into_bytes().unwrap().to_vec()).unwrap();
+
+    if std::env::var("ENVIRONMENT").unwrap() == "development" {
+        fs::write("converted_markdown.md", transformed_markdown.clone()).unwrap();
+        println!("Converted HTML: {:?}", transformed_markdown);
+    }
+    transformed_markdown
 }
 
 pub fn markdown_to_html(markdown: &str) -> String {
