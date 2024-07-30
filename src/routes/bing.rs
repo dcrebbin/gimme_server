@@ -1,4 +1,4 @@
-use actix_web::{web, HttpResponse, Responder};
+use actix_web::{web, HttpResponse};
 use reqwest::header::{HeaderMap, HeaderValue};
 use serde::{Deserialize, Serialize};
 use std::time::Instant;
@@ -138,10 +138,10 @@ pub struct RankingItemValue {
 
 #[derive(Deserialize)]
 pub struct SearchQuery {
-    q: String,
+    pub query: String,
 }
 
-pub async fn search(query: web::Json<SearchQuery>) -> impl Responder {
+pub async fn search(request: web::Json<SearchQuery>) -> HttpResponse {
     let start_time: Instant = Instant::now();
     let search_endpoint = "https://api.bing.microsoft.com/v7.0/search";
     let api_key = match std::env::var("BING_API_KEY") {
@@ -149,7 +149,7 @@ pub async fn search(query: web::Json<SearchQuery>) -> impl Responder {
         Err(_) => return HttpResponse::InternalServerError().body("BING_API_KEY not set"),
     };
 
-    println!("{:?}", query.q);
+    println!("{:?}", request.query);
 
     let mut headers = HeaderMap::new();
     match HeaderValue::from_str(&api_key) {
@@ -161,7 +161,7 @@ pub async fn search(query: web::Json<SearchQuery>) -> impl Responder {
 
     let client = reqwest::Client::new();
     let encoded_query = form_urlencoded::Serializer::new(String::new())
-        .append_pair("q", query.q.as_str())
+        .append_pair("q", request.query.as_str())
         .finish();
 
     let search_response = match client

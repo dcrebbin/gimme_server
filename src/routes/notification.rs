@@ -4,6 +4,7 @@ use pulldown_cmark::{html, Options, Parser};
 use std::{fs, time::Instant};
 
 use crate::routes::{
+    bing::{search, SearchQuery},
     email::{send_email, Email},
     open_ai::{self, CompletionRequest},
     perplexity::{self, SearchRequest},
@@ -25,18 +26,24 @@ pub const CUSTOM_EMAILS: [CustomEmail; 1] = [CustomEmail {
 
 pub const MARKDOWN_TEMPLATE: &str = include_str!("../templates/markdown_template.md");
 
-const SEARCH_OPTIMISATION_PROMPT: &str = "Optimise this natural language query to show the best and latest results in a search engine. Only return the updated query. If the query contains more than 1 request then split it into multiple queries using semi-colons ;. Query:";
+pub const SEARCH_OPTIMISATION_PROMPT: &str = "Optimise this natural language query to show the best and latest results in a search engine. Only return the updated query. If the query contains more than 1 request then split it into multiple queries using semi-colons ;. Query:";
 
 pub async fn send_notification() -> Result<String, Error> {
+    let use_open_ai: bool = std::env::var("USE_OPEN_AI").unwrap() == "true";
+
     for email in CUSTOM_EMAILS {
         if email.schedule.contains(&chrono::Local::now().weekday()) {
             let start_time = Instant::now();
 
-            let search_results = create_optimized_search_queries(&email.topic).await;
+            let search_results: Vec<String> = create_optimized_search_queries(&email.topic).await;
 
             let mut converted_markdowns = Vec::new();
             for search_result in search_results {
-                let search_result = perplexity_search_and_transform(&search_result).await;
+                let search_result = if use_open_ai {
+                    open_ai_search_and_transform(&search_result).await
+                } else {
+                    perplexity_search_and_transform(&search_result).await
+                };
                 converted_markdowns.push(search_result);
             }
 
@@ -87,6 +94,36 @@ async fn create_optimized_search_queries(topic: &str) -> Vec<String> {
         .collect()
 }
 
+pub async fn open_ai_search_and_transform(query: &str) -> String {
+    let json_query = web::Json(SearchQuery {
+        query: query.to_string(),
+    });
+
+    let search_results = search(json_query).await;
+
+    let search_results = search_results.into_body();
+
+    let stringified_search_results =
+        String::from_utf8(search_results.try_into_bytes().unwrap().to_vec()).unwrap();
+
+    let transformed_search_results = open_ai::transform(web::Json(CompletionRequest {
+        model: "gpt-4o-mini".to_string(),
+        query: "Retrieve the most relevant information from the following search results and return it in markdown format. If there are no results then return nothing. Use the following markdown template".to_string() + MARKDOWN_TEMPLATE + " Input:" + &stringified_search_results,
+    }))
+    .await;
+
+    let transformed_search_results = transformed_search_results.into_body();
+    let transformed_search_results = String::from_utf8(
+        transformed_search_results
+            .try_into_bytes()
+            .unwrap()
+            .to_vec(),
+    )
+    .unwrap();
+
+    transformed_search_results
+}
+
 pub async fn perplexity_search_and_transform(query: &str) -> String {
     let search_result = perplexity::search_and_transform(web::Json(SearchRequest {
         query: query.to_string(),
@@ -102,6 +139,7 @@ pub async fn perplexity_search_and_transform(query: &str) -> String {
 }
 
 pub async fn convert_to_markdown(markdown: &str) -> String {
+    let start_time = Instant::now();
     let transformed_markdown = open_ai::transform(web::Json(CompletionRequest {
         model: "gpt-4o-mini".to_string(),
         query:
@@ -120,6 +158,8 @@ pub async fn convert_to_markdown(markdown: &str) -> String {
         fs::write("converted_markdown.md", transformed_markdown.clone()).unwrap();
         println!("Converted HTML: {:?}", transformed_markdown);
     }
+    let duration = start_time.elapsed();
+    println!("Markdown conversion took: {:?}", duration);
     transformed_markdown
 }
 
