@@ -100,6 +100,10 @@ async fn main() -> std::io::Result<()> {
                 "/perplexity",
                 web::post().to(routes::perplexity::search_and_transform),
             )
+            .route(
+                "/notification",
+                web::post().to(routes::notification::send_notification),
+            )
             .route("/hey", web::get().to(manual_hello))
     })
     .bind(("0.0.0.0", port))?

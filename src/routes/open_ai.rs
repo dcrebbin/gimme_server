@@ -1,4 +1,4 @@
-use actix_web::{web, HttpResponse, Responder};
+use actix_web::{web, HttpResponse};
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION, CONTENT_TYPE};
 use serde::{Deserialize, Serialize};
 use std::time::Instant;
@@ -25,13 +25,14 @@ pub struct Choice {
     message: Option<Message>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 pub struct CompletionRequest {
-    model: String,
-    prompt: String,
+    pub model: String,
+    pub query: String,
 }
 
-pub async fn transform(req: web::Json<CompletionRequest>) -> impl Responder {
+pub async fn transform(req: web::Json<CompletionRequest>) -> HttpResponse {
+    println!("Request: {:?}", req);
     let start_time: Instant = Instant::now();
     let completions_endpoint = "https://api.openai.com/v1/chat/completions";
     let api_key = match std::env::var("OPEN_AI_API_KEY") {
@@ -56,7 +57,7 @@ pub async fn transform(req: web::Json<CompletionRequest>) -> impl Responder {
             },
             Message {
                 role: "user".to_string(),
-                content: req.prompt.clone(),
+                content: req.query.clone(),
             },
         ],
     };
@@ -96,7 +97,9 @@ pub async fn transform(req: web::Json<CompletionRequest>) -> impl Responder {
     let duration: std::time::Duration = end_time.duration_since(start_time);
     println!(
         "Transform request took: {:?} with {} and {} characters",
-        duration, req.model, req.prompt.len()
+        duration,
+        req.model,
+        req.query.len()
     );
 
     let content = most_relevant_data.choices.unwrap()[0]

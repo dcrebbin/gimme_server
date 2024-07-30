@@ -1,16 +1,16 @@
-use actix_web::{web, HttpResponse, Responder};
+use actix_web::{web, HttpResponse};
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION, CONTENT_TYPE};
 use serde::{Deserialize, Serialize};
 use std::time::Instant;
 
 const SONAR_SMALL: &str = "llama-3-sonar-small-32k-online";
 const SONAR_LARGE: &str = "llama-3-sonar-large-32k-online";
-const PROMPT_RULES: &str = "";
+const PROMPT_RULES: &str = "Add the url in markdown to each result.";
 
 #[derive(Deserialize)]
 pub struct SearchRequest {
-    query: String,
-    use_sonar_small: Option<bool>,
+    pub query: String,
+    pub use_sonar_small: Option<bool>,
 }
 
 #[derive(Serialize)]
@@ -35,7 +35,7 @@ struct Choice {
     message: Message,
 }
 
-pub async fn search_and_transform(req: web::Json<SearchRequest>) -> impl Responder {
+pub async fn search_and_transform(req: web::Json<SearchRequest>) -> HttpResponse {
     let start_time: Instant = Instant::now();
     let api_key = match std::env::var("PERPLEXITY_API_KEY") {
         Ok(key) => key,

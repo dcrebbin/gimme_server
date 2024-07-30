@@ -1,16 +1,17 @@
-use std::time::Instant;
 use actix_web::{web, Error};
 use dotenv::dotenv;
+use lettre::message::{header, MultiPart, SinglePart};
 use lettre::transport::smtp::authentication::Credentials;
 use lettre::transport::smtp::SmtpTransport;
 use lettre::{Message, Transport};
 use serde::Deserialize;
+use std::time::Instant;
 
 #[derive(Deserialize)]
 pub struct Email {
-    email: String,
-    subject: String,
-    body: String,
+    pub email: String,
+    pub subject: String,
+    pub body: String,
 }
 
 pub async fn send_email(info: web::Json<Email>) -> Result<String, Error> {
@@ -26,7 +27,7 @@ pub async fn send_email(info: web::Json<Email>) -> Result<String, Error> {
         .from(smtp_username.parse().unwrap())
         .to(info.email.parse().unwrap())
         .subject(&info.subject)
-        .body(info.body.clone())
+        .multipart(MultiPart::alternative().singlepart(SinglePart::html(info.body.clone())))
         .unwrap();
 
     let creds = Credentials::new(smtp_username.to_string(), smtp_password.to_string());
