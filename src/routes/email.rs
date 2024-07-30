@@ -1,6 +1,6 @@
 use actix_web::{web, Error};
 use dotenv::dotenv;
-use lettre::message::{header, MultiPart, SinglePart};
+use lettre::message::{MultiPart, SinglePart};
 use lettre::transport::smtp::authentication::Credentials;
 use lettre::transport::smtp::SmtpTransport;
 use lettre::{Message, Transport};

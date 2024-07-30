@@ -1,4 +1,4 @@
-use actix_web::{body::MessageBody, web, Error, HttpRequest, Responder};
+use actix_web::{body::MessageBody, web, Error};
 use chrono::{Datelike, Weekday};
 use pulldown_cmark::{html, Options, Parser};
 use std::{fs, time::Instant};
@@ -24,8 +24,6 @@ pub const CUSTOM_EMAILS: [CustomEmail; 1] = [CustomEmail {
 }];
 
 const SEARCH_OPTIMISATION_PROMPT: &str = "Optimise this natural language query to show the best and latest results in a search engine. Only return the updated query. If the query contains more than 1 request then split it into multiple queries using semi-colons ;. Query:";
-const MARKDOWN_PROMPT: &str =
-    "Transform this natural language query into markdown and only return the response. Query:";
 
 pub async fn send_notification() -> Result<String, Error> {
     for email in CUSTOM_EMAILS {
@@ -56,27 +54,58 @@ pub async fn send_notification() -> Result<String, Error> {
                 let search_result = search_result.into_body();
                 let search_result =
                     String::from_utf8(search_result.try_into_bytes().unwrap().to_vec()).unwrap();
-
-                let converted_markdown_response =
-                    open_ai::transform(web::Json(CompletionRequest {
-                        query: MARKDOWN_PROMPT.to_string() + &search_result,
-                        model: "gpt-4o-mini".to_string(),
-                    }))
-                    .await;
-                let converted_markdown = converted_markdown_response.into_body();
-                let converted_markdown =
-                    String::from_utf8(converted_markdown.try_into_bytes().unwrap().to_vec())
-                        .unwrap();
-                converted_markdowns.push(converted_markdown);
+                println!("Search result: {:?}", search_result);
+                converted_markdowns.push(search_result);
             }
 
-            let converted_html = converted_markdowns
+            let combined_markdown = converted_markdowns
                 .iter()
-                .map(|markdown| markdown_to_html(&markdown))
+                .map(|markdown| markdown.to_string())
                 .collect::<Vec<String>>()
                 .join("\n");
 
-            println!("Converted HTML: {:?}", converted_html);
+            let transformed_markdown = open_ai::transform(web::Json(CompletionRequest {
+                model: "gpt-4o".to_string(),
+                query:
+                    "Convert this text into markdown so it's 100% valid and using the correct markdown formatting, replace all placeholder content with the content from Input. Remove any irrelevant content. Only return the formatted markdown response with no code blocks or anything else. Example Template:".to_string() +
+                    "### {Title}
+
+### {Section 1}
+
+**{Item 1}**
+  - **{Sub Heading}:** {content}
+  - **{Description}:** {content}
+  - [Learn more]({url})
+
+**{Item 2}**
+  - **{Sub Heading}** {content}
+  - **{Description}:** {content}
+  - [Learn more]({url})
+  
+### {Section 2}
+
+**{Item 1}**
+  - **{Sub Heading}:** {content}
+  - **{Description}:** {content}
+  - [Learn more]({url})
+
+**{Item 2}**
+  - **{Sub Heading}:** {content}
+  - **{Description}:** {content}
+  - [Learn more]({url})"
+                        + " Input:"+&combined_markdown,
+            }))
+            .await;
+
+            let transformed_markdown = transformed_markdown.into_body();
+            let transformed_markdown =
+                String::from_utf8(transformed_markdown.try_into_bytes().unwrap().to_vec()).unwrap();
+
+            fs::write("converted_markdown.md", transformed_markdown.clone()).unwrap();
+
+            println!("Converted HTML: {:?}", transformed_markdown);
+            let converted_html = markdown_to_html(&transformed_markdown);
+
             fs::write("converted_html.html", converted_html.clone()).unwrap();
             let duration = start_time.elapsed();
             println!("Notification took: {:?}", duration);

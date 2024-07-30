@@ -5,7 +5,8 @@ use std::time::Instant;
 
 const SONAR_SMALL: &str = "llama-3-sonar-small-32k-online";
 const SONAR_LARGE: &str = "llama-3-sonar-large-32k-online";
-const PROMPT_RULES: &str = "Add the url in markdown to each result.";
+const PROMPT_RULES: &str =
+    ". Transform the response into markdown and add the url at the end of each item.";
 
 #[derive(Deserialize)]
 pub struct SearchRequest {
