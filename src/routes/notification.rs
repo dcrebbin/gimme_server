@@ -1,31 +1,25 @@
+use crate::{
+    constants::{
+        config::CUSTOM_EMAILS,
+        utility::{is_development, log_query},
+    },
+    models::{
+        bing_models::SearchQuery, open_ai_models::CompletionRequest,
+        perplexity_models::SearchRequest,
+    },
+    routes::{
+        bing::search,
+        email::{send_email, Email},
+        open_ai, perplexity,
+    },
+};
 use actix_web::{body::MessageBody, web, Error};
-use chrono::{Datelike, Weekday};
+use chrono::Datelike;
+
 use pulldown_cmark::{html, Options, Parser};
 use std::{fs, time::Instant};
 
-use crate::routes::{
-    bing::{search, SearchQuery},
-    email::{send_email, Email},
-    open_ai::{self, CompletionRequest},
-    perplexity::{self, SearchRequest},
-};
-
-#[derive(Clone)]
-pub struct CustomEmail {
-    topic: &'static str,
-    subject: &'static str,
-    schedule: &'static [Weekday],
-    send_to: &'static str,
-}
-pub const CUSTOM_EMAILS: [CustomEmail; 1] = [CustomEmail {
-    topic: "Retrieve the latest funding & grant programs for anything related to non-profit AI, Indigenous/Endangered languages or Australian Indigenous funding.",
-    subject: "Ourland: New potential funding opportunities",
-    schedule: &[Weekday::Tue, Weekday::Wed, Weekday::Fri],
-    send_to: "devon@land.org.au",
-}];
-
 pub const MARKDOWN_TEMPLATE: &str = include_str!("../templates/markdown_template.md");
-
 pub const SEARCH_OPTIMISATION_PROMPT: &str = "Optimise this natural language query to show the best and latest results in a search engine. Only return the updated query. If the query contains more than 1 request then split it into multiple queries using semi-colons ;. Query:";
 
 pub async fn send_notification() -> Result<String, Error> {
@@ -34,7 +28,6 @@ pub async fn send_notification() -> Result<String, Error> {
     for email in CUSTOM_EMAILS {
         if email.schedule.contains(&chrono::Local::now().weekday()) {
             let start_time = Instant::now();
-
             let search_results: Vec<String> = create_optimized_search_queries(&email.topic).await;
 
             let mut converted_markdowns = Vec::new();
@@ -54,15 +47,14 @@ pub async fn send_notification() -> Result<String, Error> {
                 .join("\n");
 
             let converted_markdown = convert_to_markdown(&combined_results).await;
-
             let converted_html = markdown_to_html(&converted_markdown);
 
-            if std::env::var("ENVIRONMENT").unwrap() == "development" {
-                println!("Converted HTML: {:?}", converted_html);
+            if is_development() {
+                log_query(&format!("Converted HTML: {:?}", converted_html));
                 fs::write("converted_template.html", converted_html.clone()).unwrap();
             }
             let duration = start_time.elapsed();
-            println!("Notification took: {:?}", duration);
+            log_query(&format!("Notification took: {:?}", duration));
 
             let _ = send_email(web::Json(Email {
                 email: email.send_to.to_string(),
@@ -154,27 +146,23 @@ pub async fn convert_to_markdown(markdown: &str) -> String {
     let transformed_markdown =
         String::from_utf8(transformed_markdown.try_into_bytes().unwrap().to_vec()).unwrap();
 
-    if std::env::var("ENVIRONMENT").unwrap() == "development" {
+    if is_development() {
         fs::write("converted_markdown.md", transformed_markdown.clone()).unwrap();
-        println!("Converted HTML: {:?}", transformed_markdown);
+        log_query(&format!("Converted HTML: {:?}", transformed_markdown));
     }
     let duration = start_time.elapsed();
-    println!("Markdown conversion took: {:?}", duration);
+    log_query(&format!("Markdown conversion took: {:?}", duration));
     transformed_markdown
 }
 
 pub fn markdown_to_html(markdown: &str) -> String {
-    // Set up options (you can customize these)
     let mut options = Options::empty();
     options.insert(Options::ENABLE_STRIKETHROUGH);
     options.insert(Options::ENABLE_TABLES);
 
-    // Parse the markdown
     let parser = Parser::new_ext(markdown, options);
 
-    // Write to String buffer
     let mut html_output = String::new();
     html::push_html(&mut html_output, parser);
-
     html_output
 }

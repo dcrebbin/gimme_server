@@ -1,3 +1,4 @@
+use crate::constants::utility::{log_error, log_query};
 use actix_web::{web, Error};
 use dotenv::dotenv;
 use lettre::message::{MultiPart, SinglePart};
@@ -36,13 +37,13 @@ pub async fn send_email(info: web::Json<Email>) -> Result<String, Error> {
         .credentials(creds)
         .build();
     match mailer.send(&email) {
-        Ok(_) => println!("Email sent successfully!"),
-        Err(e) => eprintln!("Could not send email: {:?}", e),
+        Ok(_) => log_query(&format!("Email sent successfully!")),
+        Err(e) => log_error(&format!("Could not send email: {:?}", e)),
     }
 
     let end_time: Instant = Instant::now();
     let duration: std::time::Duration = end_time.duration_since(start_time);
-    println!("Email request took: {:?}", duration);
+    log_query(&format!("Email request took: {:?}", duration));
 
     Ok(format!("Email sent!"))
 }

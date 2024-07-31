@@ -1,43 +1,24 @@
+use crate::{
+    constants::{
+        config::OPEN_AI_COMPLETIONS_ENDPOINT,
+        utility::{log_error, log_query},
+    },
+    models::open_ai_models::{CompletionRequest, Message, OpenAiRequest, OpenAiResponse},
+};
 use actix_web::{web, HttpResponse};
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION, CONTENT_TYPE};
-use serde::{Deserialize, Serialize};
 use std::time::Instant;
 
-#[derive(Serialize, Deserialize)]
-pub struct OpenAiRequest {
-    model: String,
-    messages: Vec<Message>,
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct Message {
-    role: String,
-    content: String,
-}
-
-#[derive(Deserialize, Serialize)]
-pub struct OpenAiResponse {
-    choices: Option<Vec<Choice>>,
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct Choice {
-    message: Option<Message>,
-}
-
-#[derive(Deserialize, Debug)]
-pub struct CompletionRequest {
-    pub model: String,
-    pub query: String,
-}
-
 pub async fn transform(req: web::Json<CompletionRequest>) -> HttpResponse {
-    println!("Request: {:?}", req);
+    log_query(&format!("Request: {:?}", req));
     let start_time: Instant = Instant::now();
-    let completions_endpoint = "https://api.openai.com/v1/chat/completions";
+    let completions_endpoint = OPEN_AI_COMPLETIONS_ENDPOINT;
     let api_key = match std::env::var("OPEN_AI_API_KEY") {
         Ok(key) => key,
-        Err(_) => return HttpResponse::InternalServerError().body("OPEN_AI_API_KEY not set"),
+        Err(_) => {
+            log_error("OPEN_AI_API_KEY not set");
+            return HttpResponse::InternalServerError().body("OPEN_AI_API_KEY not set");
+        }
     };
 
     let mut headers = HeaderMap::new();
@@ -71,7 +52,8 @@ pub async fn transform(req: web::Json<CompletionRequest>) -> HttpResponse {
     {
         Ok(response) => response,
         Err(e) => {
-            return HttpResponse::InternalServerError().body(format!("Request failed: {}", e))
+            log_error(&format!("Request failed: {}", e));
+            return HttpResponse::InternalServerError().body(format!("Request failed: {}", e));
         }
     };
 
@@ -83,7 +65,8 @@ pub async fn transform(req: web::Json<CompletionRequest>) -> HttpResponse {
     let most_relevant_data: OpenAiResponse = match response.json().await {
         Ok(data) => data,
         Err(e) => {
-            return HttpResponse::InternalServerError().body(format!("JSON parsing failed: {}", e))
+            log_error(&format!("JSON parsing failed: {}", e));
+            return HttpResponse::InternalServerError().body(format!("JSON parsing failed: {}", e));
         }
     };
 
@@ -95,12 +78,12 @@ pub async fn transform(req: web::Json<CompletionRequest>) -> HttpResponse {
 
     let end_time = Instant::now();
     let duration: std::time::Duration = end_time.duration_since(start_time);
-    println!(
+    log_query(&format!(
         "Transform request took: {:?} with {} and {} characters",
         duration,
         req.model,
         req.query.len()
-    );
+    ));
 
     let content = most_relevant_data.choices.unwrap()[0]
         .message
@@ -109,6 +92,9 @@ pub async fn transform(req: web::Json<CompletionRequest>) -> HttpResponse {
 
     match content {
         Some(c) => HttpResponse::Ok().body(c),
-        None => HttpResponse::InternalServerError().body("Invalid response format from OpenAI"),
+        None => {
+            log_error("Invalid response format from OpenAI");
+            HttpResponse::InternalServerError().body("Invalid response format from OpenAI")
+        }
     }
 }

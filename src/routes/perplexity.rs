@@ -1,40 +1,19 @@
 use actix_web::{web, HttpResponse};
+
+use crate::{
+    constants::{
+        config::PERPLEXITY_SEARCH_ENDPOINT,
+        utility::{log_error, log_query},
+    },
+    models::perplexity_models::{Message, PerplexityRequest, PerplexityResponse, SearchRequest},
+};
 use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION, CONTENT_TYPE};
-use serde::{Deserialize, Serialize};
 use std::time::Instant;
 
 const SONAR_SMALL: &str = "llama-3-sonar-small-32k-online";
 const SONAR_LARGE: &str = "llama-3-sonar-large-32k-online";
 const PROMPT_RULES: &str =
     ". Transform the response into markdown and add the url at the end of each item.";
-
-#[derive(Deserialize)]
-pub struct SearchRequest {
-    pub query: String,
-    pub use_sonar_small: Option<bool>,
-}
-
-#[derive(Serialize)]
-struct PerplexityRequest {
-    model: String,
-    messages: Vec<Message>,
-}
-
-#[derive(Serialize, Deserialize)]
-struct Message {
-    role: String,
-    content: String,
-}
-
-#[derive(Deserialize)]
-struct PerplexityResponse {
-    choices: Vec<Choice>,
-}
-
-#[derive(Deserialize)]
-struct Choice {
-    message: Message,
-}
 
 pub async fn search_and_transform(req: web::Json<SearchRequest>) -> HttpResponse {
     let start_time: Instant = Instant::now();
@@ -68,7 +47,7 @@ pub async fn search_and_transform(req: web::Json<SearchRequest>) -> HttpResponse
 
     let client = reqwest::Client::new();
     let perplexity_response = match client
-        .post("https://api.perplexity.ai/chat/completions")
+        .post(PERPLEXITY_SEARCH_ENDPOINT)
         .headers(headers)
         .json(&perplexity_request)
         .send()
@@ -76,7 +55,8 @@ pub async fn search_and_transform(req: web::Json<SearchRequest>) -> HttpResponse
     {
         Ok(response) => response,
         Err(e) => {
-            return HttpResponse::InternalServerError().body(format!("Request failed: {}", e))
+            log_error(&format!("Request failed: {}", e));
+            return HttpResponse::InternalServerError().body(format!("Request failed: {}", e));
         }
     };
 
@@ -89,12 +69,12 @@ pub async fn search_and_transform(req: web::Json<SearchRequest>) -> HttpResponse
 
     let end_time: Instant = Instant::now();
     let duration: std::time::Duration = end_time.duration_since(start_time);
-    println!(
+    log_query(&format!(
         "Perplexity request took: {:?} with {} and {} characters",
         duration,
         perplexity_request.model,
         perplexity_request.messages[0].content.len()
-    );
+    ));
 
     let response_content: PerplexityResponse = match perplexity_response.json().await {
         Ok(content) => content,
@@ -106,7 +86,10 @@ pub async fn search_and_transform(req: web::Json<SearchRequest>) -> HttpResponse
     let content = get_perplexity_response(&response_content);
     match content {
         Some(c) => HttpResponse::Ok().body(c),
-        None => HttpResponse::BadRequest().body("No content"),
+        None => {
+            log_error("No content");
+            HttpResponse::BadRequest().body("No content")
+        }
     }
 }
 
