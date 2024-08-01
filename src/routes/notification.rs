@@ -13,8 +13,10 @@ use crate::{
         open_ai, perplexity,
     },
 };
+use actix_web::rt::spawn;
 use actix_web::{body::MessageBody, web, Error};
 use chrono::Datelike;
+use tokio::sync::mpsc;
 
 use pulldown_cmark::{html, Options, Parser};
 use std::{fs, time::Instant};
@@ -23,48 +25,65 @@ pub const MARKDOWN_TEMPLATE: &str = include_str!("../templates/markdown_template
 pub const SEARCH_OPTIMISATION_PROMPT: &str = "Optimise this natural language query to show the best and latest results in a search engine. Only return the updated query. If the query contains more than 1 request then split it into multiple queries using semi-colons ;. Query:";
 
 pub async fn send_notification() -> Result<String, Error> {
-    let use_open_ai: bool = std::env::var("USE_OPEN_AI").unwrap() == "true";
-
-    for email in CUSTOM_EMAILS {
-        if email.schedule.contains(&chrono::Local::now().weekday()) {
-            let start_time = Instant::now();
-            let search_results: Vec<String> = create_optimized_search_queries(&email.topic).await;
-
-            let mut converted_markdowns = Vec::new();
-            for search_result in search_results {
-                let search_result = if use_open_ai {
-                    open_ai_search_and_transform(&search_result).await
-                } else {
-                    perplexity_search_and_transform(&search_result).await
-                };
-                converted_markdowns.push(search_result);
+    println!("Sending notification/s");
+    let (tx, _) = mpsc::channel(32);
+    let task_id = 1;
+    let tx_clone = tx.clone();
+    spawn(async move {
+        let use_open_ai: bool = std::env::var("USE_OPEN_AI").unwrap() == "true";
+        println!(
+            "Using: {}",
+            if use_open_ai {
+                "OpenAI & Bing"
+            } else {
+                "Perplexity"
             }
+        );
+        for email in CUSTOM_EMAILS {
+            if email.schedule.contains(&chrono::Local::now().weekday()) {
+                println!("Sending notification for: {}", email.topic);
+                let start_time = Instant::now();
+                let search_results: Vec<String> =
+                    create_optimized_search_queries(&email.topic).await;
 
-            let combined_results = converted_markdowns
-                .iter()
-                .map(|markdown| markdown.to_string())
-                .collect::<Vec<String>>()
-                .join("\n");
+                let mut converted_markdowns = Vec::new();
+                for search_result in search_results {
+                    let search_result = if use_open_ai {
+                        open_ai_search_and_transform(&search_result).await
+                    } else {
+                        perplexity_search_and_transform(&search_result).await
+                    };
+                    converted_markdowns.push(search_result);
+                }
 
-            let converted_markdown = convert_to_markdown(&combined_results).await;
-            let converted_html = markdown_to_html(&converted_markdown);
+                let combined_results = converted_markdowns
+                    .iter()
+                    .map(|markdown| markdown.to_string())
+                    .collect::<Vec<String>>()
+                    .join("\n");
 
-            if is_development() {
-                log_query(&format!("Converted HTML: {:?}", converted_html));
-                fs::write("converted_template.html", converted_html.clone()).unwrap();
+                let converted_markdown = convert_to_markdown(&combined_results).await;
+                let converted_html = markdown_to_html(&converted_markdown);
+
+                if is_development() {
+                    log_query(&format!("Converted HTML: {:?}", converted_html));
+                    fs::write("converted_template.html", converted_html.clone()).unwrap();
+                }
+                let duration = start_time.elapsed();
+                log_query(&format!("Notification took: {:?}", duration));
+
+                let _ = send_email(web::Json(Email {
+                    email: email.send_to.to_string(),
+                    subject: email.subject.to_string(),
+                    body: converted_html.clone(),
+                }))
+                .await;
             }
-            let duration = start_time.elapsed();
-            log_query(&format!("Notification took: {:?}", duration));
-
-            let _ = send_email(web::Json(Email {
-                email: email.send_to.to_string(),
-                subject: email.subject.to_string(),
-                body: converted_html.clone(),
-            }))
-            .await;
         }
-    }
 
+        let _ = tx_clone.send(task_id).await;
+        println!("Notification/s sent!");
+    });
     Ok(format!("Notification/s sent!"))
 }
 

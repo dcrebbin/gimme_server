@@ -14,6 +14,6 @@ pub struct CustomEmail {
 pub const CUSTOM_EMAILS: [CustomEmail; 1] = [CustomEmail {
     topic: "Retrieve the latest funding & grant programs for anything related to non-profit AI, Indigenous/Endangered languages or Australian Indigenous funding.",
     subject: "Ourland: New potential funding opportunities",
-    schedule: &[Weekday::Tue, Weekday::Wed, Weekday::Fri],
+    schedule: &[Weekday::Sun, Weekday::Tue, Weekday::Thu],
     send_to: "devon@land.org.au",
 }];
